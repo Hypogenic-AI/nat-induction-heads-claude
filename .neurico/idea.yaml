@@ -1,0 +1,23 @@
+idea:
+  title: Naturalistic Induction Heads
+  domain: machine_learning
+  hypothesis: 'Induction heads identified in prior work were discovered using random
+    data. There may exist induction heads, or similar mechanisms, that only function
+    on data resembling the model''s training distribution.
+
+    '
+  background:
+    description: "Elhage et al. 2021 and Olsson et al. 2021 famously discovered and\
+      \ described induction heads. I've seen surprisingly little about them since.\
+      \ One thing I've always wondered\u2014they found induction heads through copying\
+      \ on random data. Are there induction heads (or something like them) that only\
+      \ work on data that looks more like the training set?\n"
+  metadata:
+    author: Ari Holtzman
+    source: IdeaHub
+    source_url: https://hypogenic.ai/ideahub/idea/6nfMPtf7OaP6HZShqqog
+    idea_id: naturalistic_induction_heads_20260320_233211_bb4f23d0
+    created_at: '2026-03-20T23:32:11.214410'
+    status: submitted
+    github_repo_name: nat-induction-heads-claude
+    github_repo_url: https://github.com/Hypogenic-AI/nat-induction-heads-claude
