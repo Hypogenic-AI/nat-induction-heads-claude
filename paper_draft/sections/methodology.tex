@@ -1,0 +1,65 @@
+\section{Methodology}
+\label{sec:method}
+
+We study induction head behavior in \gpttwo (124M parameters, 12 layers, 12 heads per layer) using \tlens \cite{nanda2022transformerlens}.
+Our experimental protocol consists of four complementary analyses: standard induction score comparison, fuzzy (embedding-similarity) induction, OV copying analysis, and causal ablation.
+
+\subsection{Data Construction}
+\label{sec:data}
+
+\para{Random repeated sequences.}
+Following \citet{olsson2022context}, we construct 50 sequences of 257 tokens each: a \bos token followed by 128 random tokens sampled uniformly from the vocabulary, then the same 128 tokens repeated.
+By construction, 50.0\% of tokens in the second half are exact repeats of tokens in the first half.
+
+\para{Naturalistic sequences.}
+We sample 50 passages from \owt (articles with $\geq$500 characters), tokenize with GPT-2's BPE tokenizer, prepend \bos, and truncate to 257 tokens.
+Natural text has a token repeat rate of 41.1\% $\pm$ 5.4\%, surprisingly close to the 50\% rate in random sequences.
+This means that differences in induction scores between conditions are not primarily driven by fewer opportunities for induction on natural text.
+
+\subsection{Induction Score}
+\label{sec:induction_score}
+
+For each head $h$ at layer $l$, we compute the \newterm{induction score} on a sequence $\vx = (x_1, \ldots, x_T)$ as follows.
+Let $\alpha^{(l,h)}_{i,j}$ denote the attention weight from position $i$ to position $j$ for head $h$ in layer $l$.
+For each position $i$ where $x_i = x_k$ for some $k < i$ (a repeated token), the induction score contribution is $\alpha^{(l,h)}_{i, k+1}$---the attention paid to the position \emph{after} the previous occurrence.
+We average this quantity over all repeated-token positions and over all sequences:
+\begin{equation}
+    \iscore(l, h) = \frac{1}{|\gS|} \sum_{s \in \gS} \frac{1}{|R_s|} \sum_{i \in R_s} \alpha^{(l,h)}_{i, \text{prev}(i)+1}
+    \label{eq:iscore}
+\end{equation}
+where $\gS$ is the set of sequences, $R_s$ is the set of positions with a repeated token in sequence $s$, and $\text{prev}(i)$ returns the most recent prior position where the same token appeared.
+This score is computed identically on both random and naturalistic data.
+
+\subsection{Fuzzy Induction Score}
+\label{sec:fuzzy}
+
+To test whether naturalistic induction operates over semantically similar (rather than identical) tokens, we relax the exact-match requirement.
+We compute cosine similarity between token embeddings and consider position $k$ a ``match'' for position $i$ if $\cos(\ve_{x_i}, \ve_{x_k}) > 0.8$, where $\ve_{x}$ denotes the embedding of token $x$.
+The fuzzy induction score is then computed as in \eqref{eq:iscore} but over these similarity-based matches.
+
+\subsection{OV Copying Score}
+\label{sec:copying}
+
+The induction score measures \emph{where} a head attends (the QK circuit).
+To measure \emph{what} it does with that information (the OV circuit), we compute a copying score.
+For each head on each sequence, we: (1) identify the most-attended position $j^*$ (excluding \bos and self-attention), (2) compute the head's output $\vz^{(l,h)} \mW_O^{(l,h)}$, (3) project through the unembedding matrix $\mW_U$ to obtain logits, and (4) measure whether the logit of the attended token $x_{j^*}$ exceeds the mean logit:
+\begin{equation}
+    \cscore(l, h) = \frac{1}{|\gS|} \sum_{s \in \gS} \left( (\vz^{(l,h)} \mW_O^{(l,h)} \mW_U)_{x_{j^*}} - \overline{\text{logits}} \right)
+    \label{eq:cscore}
+\end{equation}
+
+A positive copying score indicates that the head's OV circuit tends to promote the token it attends to, consistent with a copying mechanism.
+
+\subsection{Ablation Study}
+\label{sec:ablation}
+
+To measure causal importance, we zero out attention patterns for specific head groups and measure the resulting increase in next-token prediction loss on natural text.
+We compare two groups: (1) all 21 heads with random induction score $> 0.10$ (the standard threshold), and (2) the top-5 heads ranked by naturalistic induction score.
+
+\subsection{Implementation Details}
+\label{sec:implementation}
+
+All experiments use PyTorch 2.10 on a single NVIDIA RTX A6000 GPU (49~GB VRAM).
+We use \tlens for model access, hook-based activation caching, and attention pattern extraction.
+For the induction score threshold, we follow the standard cutoff of 0.10 used in prior work \cite{olsson2022context}.
+All random sequences use seed 42 for reproducibility.

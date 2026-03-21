@@ -1,0 +1,77 @@
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{The QK--OV Dissociation}
+\label{sec:discussion_dissociation}
+
+Our most striking finding is the dissociation between attention patterns (QK circuit) and output behavior (OV circuit) across data conditions.
+On random data, the QK circuit produces strong induction attention patterns, and the OV circuit copies the attended token.
+On natural text, the QK circuit distributes attention across many contextually relevant positions---weakening the induction-specific signal---but the OV circuit actually copies \emph{more effectively} when the attended content is natural language.
+
+This dissociation suggests that the QK and OV circuits serve partially different functions depending on data distribution.
+The QK circuit in induction heads may function as a general ``find relevant prior context'' mechanism, of which the $[A][B]\ldots[A] \rightarrow B$ pattern is a special case that dominates on random data but is one of many useful patterns on natural text.
+Meanwhile, the OV circuit appears tuned to the statistics of natural language, producing stronger copying signals when the input matches the training distribution.
+
+\subsection{Why Are Induction Scores So Much Lower on Natural Text?}
+\label{sec:discussion_why}
+
+Three factors likely contribute to the 10--40$\times$ reduction in induction scores on natural text:
+
+\para{Attention competition.}
+On random repeated sequences, the induction-pattern position is the single most informative attention target.
+On natural text, many positions carry useful information---syntactic heads, semantic associates, positional neighbors---creating competition that dilutes the induction-specific signal.
+
+\para{Multiple prediction strategies.}
+On random data, copying is the only viable prediction strategy.
+On natural text, the model can leverage syntactic patterns, semantic associations, n-gram statistics, and many other cues, reducing reliance on any single mechanism.
+
+\para{Distributional mismatch.}
+The random-sequence setup, by forcing exact token repetition in a fixed pattern, creates a maximally favorable environment for the induction mechanism.
+Natural text, with its Zipfian token frequencies and rich contextual structure, is a far more complex prediction problem.
+
+Notably, we ruled out one intuitive explanation: the difference is \emph{not} primarily driven by fewer repeated tokens in natural text.
+Natural text has 41\% repeated tokens versus 50\% by construction in random sequences---a modest gap that cannot explain the 10--40$\times$ score difference.
+We also ruled out matching precision: fuzzy (embedding-similarity) matching does not recover higher scores, confirming that the bottleneck is attention competition, not token-identity constraints.
+
+\subsection{Implications for Mechanistic Interpretability}
+\label{sec:discussion_implications}
+
+Our results have practical implications for how the field studies induction heads and, more broadly, how we evaluate circuit-level mechanisms:
+
+\para{Detection is reliable; quantification is not.}
+Random-sequence detection correctly identifies \emph{which} heads perform induction (high rank correlation, high top-$K$ overlap).
+However, the \emph{magnitude} of the induction score on random data dramatically overstates the strength of the induction attention pattern on natural text.
+Researchers should complement random-sequence detection with naturalistic evaluation when making claims about the importance of specific heads.
+
+\para{QK and OV circuits should be evaluated separately.}
+The standard induction score conflates attention patterns and output behavior.
+Our results show these can diverge: a head may show weak induction attention on natural text while having a strongly distribution-sensitive OV copying circuit.
+Evaluating QK and OV contributions independently, as advocated by \citet{elhage2021mathematical}, provides a more complete picture.
+
+\para{Distribution matters for circuit evaluation.}
+More broadly, our findings caution against evaluating circuits exclusively on synthetic data.
+The behavior of a circuit on artificial inputs may differ qualitatively from its behavior on the data distribution the model was trained on.
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+\para{Single model.}
+We study only \gpttwo (124M parameters).
+Larger models with more layers and heads may develop more specialized induction mechanisms, including genuinely separate naturalistic-only heads.
+Scaling this analysis to GPT-2-medium, GPT-2-large, and the Pythia model suite is an important next step.
+
+\para{Single detection metric.}
+The induction score measures one specific attention pattern.
+Other induction-like behaviors---attending to semantically similar contexts \cite{ren2024identifying}, computing conditional probabilities \cite{edelman2024evolution}, or performing abstract pattern completion---may require different detection methods that we do not explore here.
+
+\para{Short sequences.}
+Our 257-token sequences are relatively short.
+Longer contexts may activate different attention patterns, particularly for late-layer heads that might benefit from richer context.
+
+\para{Static analysis.}
+We analyze a fully trained model at a single checkpoint.
+The relationship between random and naturalistic induction behavior may evolve during training, with early-training heads potentially showing different cross-condition patterns than late-training heads \cite{olsson2022context, singh2024needs}.
+
+\para{Threshold sensitivity.}
+The 0.10 induction threshold is conventional but somewhat arbitrary.
+Using percentile-based thresholds (top 10\% of heads) would yield slightly different categorizations, though our correlation-based analyses are threshold-independent.

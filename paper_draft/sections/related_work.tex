@@ -1,0 +1,21 @@
+\section{Related Work}
+\label{sec:related}
+
+\para{Induction heads and transformer circuits.}
+\citet{elhage2021mathematical} introduced a mathematical framework for understanding transformer circuits, identifying induction heads as a two-head composition: a ``previous token'' head in an early layer composes with an induction head in a later layer to implement the $[A][B]\ldots[A] \rightarrow B$ pattern.
+\citet{olsson2022context} scaled this analysis across 34 models (up to 13B parameters), demonstrating that induction heads form during a sharp phase transition early in training that coincides with a dramatic improvement in in-context learning ability.
+Their detection methodology---measuring attention patterns on random repeated sequences---has become the standard approach in the field.
+\citet{singh2024needs} decomposed induction head formation into three subcircuits (previous token attention, QK matching, and copying) and showed that their multiplicative interaction produces the phase change.
+Unlike these works, which primarily characterize induction heads using random sequences, we directly compare head behavior across random and naturalistic conditions.
+
+\para{Data distribution and mechanism formation.}
+Several recent works have examined how training data properties affect the mechanisms transformers learn.
+\citet{bietti2023birth} studied induction head emergence through an associative memory lens using quasi-naturalistic bigram statistics, finding that data distribution properties significantly affect formation speed.
+\citet{kawata2025shortcut} proved that data diversity determines whether transformers learn induction heads or positional shortcuts: sufficient diversity yields generalizable induction heads, while low diversity yields brittle positional heuristics.
+\citet{edelman2024evolution} showed that induction heads on Markov chain data can compute calibrated conditional probabilities rather than performing deterministic copying, suggesting that the underlying mechanism is richer than the standard detection metric implies.
+Our work complements these theoretical and synthetic-data studies by empirically measuring how a trained model's induction behavior differs between random and naturalistic inputs.
+
+\para{Semantic induction and beyond-copying mechanisms.}
+Most relevant to our work, \citet{ren2024identifying} discovered ``semantic induction heads'' in InternLM2-1.8B that encode syntactic dependencies and knowledge graph relations rather than performing token-level copying.
+They found that these heads correlate with the emergence of pattern discovery abilities during training, and that some pure copying heads' scores actually \emph{decrease} as semantic capabilities emerge.
+Our work differs in two key respects: (1) we systematically compare the \emph{same} heads across random and naturalistic conditions rather than identifying a new class of heads, and (2) we decompose the discrepancy into attention-pattern (QK) versus output-circuit (OV) contributions, revealing that late-layer heads have distribution-sensitive copying circuits.

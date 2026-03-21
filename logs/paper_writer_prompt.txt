@@ -1,0 +1,760 @@
+You are an academic paper writer. Generate a complete NEURIPS style paper
+based on the experiment results provided.
+
+════════════════════════════════════════════════════════════════════════════════
+                         IMPORTANT: BEFORE YOU START
+════════════════════════════════════════════════════════════════════════════════
+
+Before writing any content, you MUST complete these steps:
+
+1. READ THE SKILL: Review the paper-writer skill at .claude/skills/paper-writer/SKILL.md
+2. READ THE STYLE GUIDE: Study templates/paper_writing/lab_style_guide.md carefully
+3. REVIEW EXAMPLES: Browse paper_examples/ for formatting and language patterns:
+   - Look at sections/1.introduction.tex for language style
+   - Look at tables/*.tex for table formatting
+   - Look at commands/*.tex for macro usage
+4. VERIFY COMMAND TEMPLATES: Command templates (math.tex, general.tex, macros.tex) are pre-copied to paper_draft/commands/
+
+CRITICAL: Reference example papers for FORMATTING and LANGUAGE STYLE only.
+Do NOT copy content, phrasing, or narrative structure from the example papers.
+The examples are in a different research domain - focus only on presentation style.
+
+════════════════════════════════════════════════════════════════════════════════
+                            EXPERIMENT REPORT
+════════════════════════════════════════════════════════════════════════════════
+
+# Naturalistic Induction Heads: Do Induction Mechanisms Differ Between Random and Natural Data?
+
+## 1. Executive Summary
+
+We investigated whether transformer attention heads exhibit different induction behavior on naturalistic text versus random repeated sequences. Using GPT-2-small and TransformerLens, we computed standard induction head scores (Olsson et al. 2022) on both random repeated token sequences and OpenWebText passages.
+
+**Key finding**: Induction heads identified on random data are the *same* heads that show the strongest (though much weaker) induction behavior on natural text — there are no &#34;hidden&#34; naturalistic-only induction heads in the standard sense. However, the *magnitude* of induction behavior differs dramatically (~20x lower on natural text), and late-layer heads show significantly stronger *copying* behavior on natural text than on random data, suggesting they implement a richer, distribution-sensitive form of pattern completion that the standard random-sequence detection protocol underestimates.
+
+## 2. Goal
+
+**Hypothesis**: Induction heads identified via random token sequences (Olsson et al. 2022) may miss mechanisms that only activate on training-distribution-like data. There may exist &#34;naturalistic induction heads&#34; that perform pattern completion on natural text but not on random sequences.
+
+**Why this matters**: Induction heads are considered fundamental to in-context learning, yet they&#39;ve been primarily studied using artificial random data. If the detection methodology misses distribution-sensitive mechanisms, our understanding of how transformers do ICL is incomplete.
+
+## 3. Data Construction
+
+### Datasets
+| Dataset | Source | Size Used | Purpose |
+|---------|--------|-----------|---------|
+| Random repeated sequences | Generated | 50 sequences, 257 tokens each | Baseline (Olsson et al. method) |
+| OpenWebText | HuggingFace streaming | 50 sequences, 257 tokens each | Naturalistic text |
+
+### Data Characteristics
+- **Random sequences**: BOS + 128 random tokens + same 128 tokens repeated. Token repeat rate: 50.0% ± 0.1%
+- **Natural text**: First 257 tokens of OpenWebText articles (≥500 chars). Token repeat rate: 41.1% ± 5.4%
+
+The repeat rates are surprisingly similar — natural text has ~41% of tokens appearing earlier in the sequence, vs 50% by construction in random sequences. This means the difference in induction scores is not primarily driven by fewer opportunities for induction on natural text.
+
+### Preprocessing
+- Tokenized using GPT-2&#39;s BPE tokenizer via TransformerLens
+- BOS token prepended to all sequences
+- Truncated to exactly 257 tokens for controlled comparison
+
+## 4. Experiment Description
+
+### Methodology
+
+#### High-Level Approach
+We ran three complementary analyses:
+
+1. **Standard induction detection** (Experiment 1): Measure per-head induction scores on both random and natural data using the Olsson et al. methodology (attention to position-after-duplicate-token)
+2. **OV copying analysis** (Experiment 2): Measure whether each head&#39;s output-value circuit boosts logits of attended tokens — separating &#34;what the head attends to&#34; from &#34;what it does with that information&#34;
+3. **Ablation study** (Experiment 3): Zero out heads and measure causal impact on natural text loss
+
+#### Why This Method?
+The Olsson et al. induction score measures a specific attention pattern: when a token repeats, does the head attend to the position *after* the previous occurrence? This is the standard definition. By applying it identically to both random and natural data, we get a controlled comparison.
+
+The OV copying score adds a crucial dimension: a head might attend to induction-relevant positions on natural text but use that information differently (e.g., for semantic prediction rather than exact copying). The copying score captures this.
+
+### Implementation Details
+
+#### Tools and Libraries
+| Library | Version | Purpose |
+|---------|---------|---------|
+| Python | 3.12.8 | Runtime |
+| PyTorch | 2.10.0+cu128 | GPU compute |
+| TransformerLens | 2.15.4 | Model access, hooks, caching |
+| NumPy | 2.3.0 | Numerical computation |
+| SciPy | 1.17.1 | Statistical tests |
+| Matplotlib | 3.10.3 | Visualization |
+
+#### Hardware
+- GPU: NVIDIA RTX A6000 (49 GB VRAM)
+- Single GPU used for all experiments
+
+#### Hyperparameters
+| Parameter | Value | Rationale |
+|-----------|-------|-----------|
+| Model | GPT-2-small (124M) | Well-studied, TransformerLens support |
+| Sequence length | 257 tokens | Matches Olsson et al. half-length of 128 |
+| N sequences | 50 (detection), 20 (deep analysis) | Balance precision vs compute |
+| Induction threshold | 0.10 (absolute) | Standard in literature |
+| Similarity threshold (fuzzy) | 0.80 cosine | Conservative for embedding similarity |
+| Random seed | 42 | Reproducibility |
+
+### Experimental Protocol
+
+**Experiment 1: Induction Score Comparison**
+For each of 50 random and 50 natural sequences:
+1. Run forward pass through GPT-2, cache all attention patterns
+2. For each head (144 total = 12 layers × 12 heads): for every position where the current token appeared earlier in the sequence, measure what fraction of that position&#39;s attention goes to the token *after* the earlier occurrence
+3. Average across sequences
+
+**Experiment 2: OV Copying Score**
+For each head on each sequence:
+1. Find the most-attended position (excluding BOS and self)
+2. Project the head&#39;s output (z × W_O) through the unembedding matrix
+3. Measure whether the logit of the attended token exceeds the mean logit
+
+**Experiment 3: Fuzzy Induction**
+Same as Experiment 1, but instead of requiring exact token match, use cosine similarity &gt; 0.8 between token embeddings to find &#34;similar&#34; prior contexts.
+
+**Experiment 4: Ablation**
+Zero out attention patterns for specific head groups and measure next-token prediction loss on natural text.
+
+## 5. Raw Results
+
+### Induction Score Comparison
+
+![Induction score heatmaps](results/plots/induction_heatmaps.png)
+*Left: Random sequences (scale 0–1). Right: Natural text (scale 0–0.1). Note the 10x difference in scale.*
+
+![Random vs natural scatter](results/plots/random_vs_natural_scatter.png)
+*Each dot is one attention head. All points fall well below the y=x line.*
+
+**Correlation between random and natural induction scores:**
+| Metric | Value | p-value |
+|--------|-------|---------|
+| Spearman ρ | 0.839 | &lt; 10⁻³⁰ |
+| Pearson r | 0.826 | &lt; 10⁻³⁰ |
+
+**Top-K overlap between highest-scoring heads:**
+| K | Overlap | Percentage |
+|---|---------|------------|
+| 5 | 4 | 80% |
+| 10 | 7 | 70% |
+| 20 | 14 | 70% |
+
+**Head classification (threshold = 0.10):**
+| Category | Count | Description |
+|----------|-------|-------------|
+| Random-only | 21 | Score &gt; 0.10 on random, &lt; 0.10 on natural |
+| Naturalistic-only | 0 | Score &gt; 0.10 on natural, &lt; 0.10 on random |
+| Universal | 0 | Score &gt; 0.10 on both |
+
+The maximum naturalistic induction score across all 144 heads was **0.082** (L6.H9), far below the 0.10 threshold. The same head scores 0.91 on random data.
+
+### Top Induction Heads
+| Head | Random Score | Natural Score | Ratio |
+|------|-------------|---------------|-------|
+| L5.H1 | 0.937 | 0.076 | 12.3x |
+| L6.H9 | 0.911 | 0.082 | 11.1x |
+| L7.H10 | 0.897 | 0.048 | 18.7x |
+| L7.H2 | 0.830 | 0.021 | 39.5x |
+| L5.H0 | 0.791 | 0.061 | 13.0x |
+
+### Fuzzy (Embedding-Similarity) Induction
+- Exact and fuzzy scores are nearly identical: Spearman r = 0.990
+- Max fuzzy score on natural text: 0.065 (vs 0.082 exact)
+- Fuzzy matching did NOT reveal hidden induction behavior — the bottleneck is not &#34;exact vs fuzzy matching&#34;
+
+### OV Copying Scores
+
+![Copying scores](results/plots/copying_scores_scatter.png)
+*Late-layer heads (yellow/green, layers 9–11) show dramatically higher copying on natural text.*
+
+**Top heads with strongest naturalistic copying enrichment:**
+| Head | Natural Copy | Random Copy | Difference |
+|------|-------------|-------------|------------|
+| L10.H0 | 10.56 | 4.19 | +6.37 |
+| L11.H8 | 6.43 | 0.22 | +6.20 |
+| L11.H2 | 11.35 | 6.07 | +5.28 |
+| L9.H2 | 4.62 | 1.70 | +2.92 |
+| L9.H8 | 5.21 | 2.31 | +2.90 |
+
+### Ablation Results
+
+![Ablation results](results/plots/ablation_results.png)
+
+| Ablated Group | N Heads | Baseline Loss | Ablated Loss | Increase |
+|---------------|---------|---------------|--------------|----------|
+| Random-detected heads (score&gt;0.1) | 21 | 3.047 | 5.380 | +76.6% |
+| Top-5 by naturalistic score | 5 | 3.047 | 4.461 | +46.4% |
+
+### Layer-wise Analysis
+
+![Layer analysis](results/plots/layer_analysis.png)
+*Left: Induction scores diverge sharply (random &gt;&gt; natural) in layers 5–11. Middle: Copying scores converge and natural exceeds random in late layers. Right: Attention entropy is similar across conditions.*
+
+### Naturalistic Copying Enrichment
+
+![Naturalistic enrichment](results/plots/naturalistic_enrichment.png)
+*Nearly all heads show higher copying scores on natural text, with the strongest enrichment in layers 9–11.*
+
+## 5. Result Analysis
+
+### Key Findings
+
+**Finding 1: No &#34;hidden&#34; naturalistic-only induction heads exist (in the standard sense)**
+The rank order of heads by induction score is highly conserved between random and natural data (Spearman ρ = 0.84, top-5 overlap = 80%). The same heads that detect [A][B]...[A]→B on random data are the ones that do it (weakly) on natural text. We found zero heads that cross the standard threshold on natural text but not random.
+
+**Finding 2: Induction scores are ~10–40x lower on natural text**
+The strongest induction head (L5.H1) scores 0.94 on random data but only 0.076 on natural text. This is NOT primarily because natural text has fewer repeated tokens (41% vs 50%), nor because the model can&#39;t find fuzzy matches (fuzzy scores are no higher). Rather, on natural text, attention is distributed across many more useful positions — the model has richer contextual signals beyond simple token copying.
+
+**Finding 3: Late-layer heads copy MORE on natural text**
+While attention-pattern-based induction scores are lower on natural text, OV copying scores tell the opposite story for layers 9–11. Heads like L10.H0, L11.H8, and L11.H2 produce outputs that boost attended-token logits 2–28x more on natural text than random. These heads&#39; OV circuits are tuned for natural language patterns, not random token distributions.
+
+**Finding 4: &#34;Random-detected&#34; induction heads are causally important for natural text**
+Ablating the 21 heads identified by random-sequence detection increases natural text loss by 76.6%. These heads are not mere random-sequence specialists — they genuinely contribute to natural language processing, even though their induction-pattern scores are low on natural text.
+
+### Interpretation
+
+The picture that emerges is nuanced:
+
+1. **The same heads do induction on both data types**, but the *magnitude* of the induction attention pattern differs dramatically. On natural text, these heads distribute attention across many relevant positions (syntactic, semantic, positional), not just the induction-pattern position. The induction score measures only one narrow signal.
+
+2. **The OV (output) side tells a different story from the QK (attention) side.** While QK matching shows weak induction patterns on natural text, the OV circuits of late-layer heads are actually *more* tuned to copy on natural text. This suggests these heads have learned distribution-sensitive copying: they copy more effectively when the attended content is natural language.
+
+3. **The answer to the original question** — &#34;are there induction heads that only work on naturalistic data?&#34; — is: **not as separate heads, but as separate *behaviors* of the same heads.** The induction heads identified on random data perform a richer, distribution-aware form of pattern completion on natural text that the standard induction score partially obscures.
+
+### Surprises
+- The near-zero fuzzy-vs-exact difference was surprising. We expected that relaxing exact-match to embedding-similarity would reveal more induction behavior on natural text, but it didn&#39;t. The bottleneck is not matching precision — it&#39;s that natural text provides many useful attention targets beyond the induction position.
+- L11.H8&#39;s copying score jumps from 0.22 (random) to 6.43 (natural) — a 29x increase. This head&#39;s OV circuit is essentially specialized for natural language copying.
+
+### Limitations
+1. **Single model**: We only tested GPT-2-small (124M params). Larger models may have more specialized heads.
+2. **Single detection metric**: The induction score measures one specific attention pattern. Other induction-like behaviors (e.g., attending to semantically similar contexts) may require different detection methods.
+3. **Sequence length**: 257 tokens is short. Longer contexts may activate different patterns.
+4. **Threshold sensitivity**: The 0.10 threshold for &#34;induction head&#34; is somewhat arbitrary. Using percentile-based thresholds (top 10%) does reveal a few heads that rank higher on natural text.
+5. **No training dynamics**: We analyzed a fully-trained model. Naturalistic induction patterns may emerge at different training stages.
+
+## 6. Conclusions
+
+### Summary
+Induction heads in GPT-2-small are **not data-type-specific** — the same heads that score highly on random repeated sequences also show the strongest (though much weaker) induction signals on natural text. However, these heads&#39; output circuits are significantly more effective at copying on natural text, suggesting they implement a distribution-aware form of pattern completion that goes well beyond what the standard random-sequence detection captures.
+
+### Implications
+- **For mechanistic interpretability**: Random-sequence detection reliably identifies the *right heads* but dramatically overestimates the *strength* of their induction behavior on natural text. Researchers should complement random-sequence detection with naturalistic evaluation.
+- **For understanding ICL**: Induction heads don&#39;t simply &#34;copy tokens after duplicates&#34; on natural text. Their attention is broadly distributed across many contextually relevant positions, while their OV circuits are tuned for natural language copying. The QK and OV circuits serve partially different functions depending on data distribution.
+- **For the original question**: The answer is &#34;no, but&#34; — there aren&#39;t separate naturalistic induction heads, but the *same* induction heads behave qualitatively differently on natural vs random data, and standard detection understates their natural-language capabilities.
+
+### Confidence in Findings
+**High confidence** in Finding 1 (no naturalistic-only heads) and Finding 2 (score magnitude difference) — these are robust across thresholds and multiple analysis methods. **Medium confidence** in Finding 3 (enhanced natural copying) — the OV analysis was run on fewer samples and the copying metric is noisier. **High confidence** in Finding 4 (ablation) — loss increases are large and consistent.
+
+## 7. Next Steps
+
+### Immediate Follow-ups
+1. **Repeat with GPT-2-medium/large and Pythia models** to test whether larger models develop more specialized heads
+2. **Semantic induction analysis** (Ren et al. 2024 methodology): measure whether these heads encode semantic relations (Used-for, Part-of, etc.) on natural text — going beyond token-level copying
+3. **Training dynamics**: Use Pythia checkpoints to track when naturalistic vs random induction behavior emerges
+
+### Alternative Approaches
+- **Logit lens / tuned lens**: Instead of measuring attention patterns, measure what each head contributes to the final prediction on natural text
+- **Activation patching**: Patch individual head outputs between random and natural contexts to isolate distribution-sensitive components
+- **Causal tracing**: Identify which heads are causally responsible for specific ICL behaviors on natural text
+
+### Open Questions
+1. Do larger models develop genuinely separate naturalistic induction heads?
+2. Why do OV circuits copy more effectively on natural text? Is this a learned property or an artifact of the embedding space?
+3. How does the transition from &#34;random-sequence induction&#34; to &#34;naturalistic pattern completion&#34; happen during training?
+4. Are the late-layer heads with high natural copying scores performing something closer to Ren et al.&#39;s &#34;semantic induction&#34;?
+
+## References
+
+1. Olsson et al. (2022). &#34;In-context Learning and Induction Heads.&#34; arXiv:2209.11895
+2. Elhage et al. (2021). &#34;A Mathematical Framework for Transformer Circuits.&#34; Anthropic.
+3. Ren et al. (2024). &#34;Identifying Semantic Induction Heads to Understand In-Context Learning.&#34;
+4. Edelman et al. (2024). &#34;The Evolution of Statistical Induction Heads.&#34;
+5. Singh et al. (2024). &#34;What Needs to Go Right for an Induction Head?&#34;
+6. Bietti et al. (2023). &#34;Birth of a Transformer.&#34;
+7. Kawata et al. (2025). &#34;From Shortcut to Induction Head.&#34;
+8. TransformerLens library: github.com/TransformerLensOrg/TransformerLens
+
+
+════════════════════════════════════════════════════════════════════════════════
+                            RESEARCH PLAN
+════════════════════════════════════════════════════════════════════════════════
+
+# Research Plan: Naturalistic Induction Heads
+
+## Motivation &amp; Novelty Assessment
+
+### Why This Research Matters
+Induction heads are considered a fundamental mechanism for in-context learning in transformers. However, they were discovered and are routinely detected using random token sequences — an artificial setup far from the natural language these models were trained on. If some induction-like mechanisms only activate on naturalistic data, we&#39;re missing a significant part of the picture of how transformers do in-context learning.
+
+### Gap in Existing Work
+Olsson et al. (2022) detect induction heads on random data, then correlate them with ICL on natural text, but never directly compare head behavior across data types. Ren et al. (2024) found &#34;semantic induction heads&#34; but only in one model (InternLM2-1.8B) and didn&#39;t systematically compare against random-sequence detection. No study has asked: **are the heads identified by random-sequence detection the same ones that do induction on natural text?**
+
+### Our Novel Contribution
+We directly compare induction head detection on random vs. naturalistic data in GPT-2, identifying:
+1. Heads that are induction heads on both random and natural data (&#34;universal induction heads&#34;)
+2. Heads that only score as induction heads on random data (&#34;random-only&#34;)
+3. Heads that only show induction behavior on natural text (&#34;naturalistic induction heads&#34;)
+4. Whether naturalistic-only heads contribute to in-context learning
+
+### Experiment Justification
+- **Experiment 1 (Random baseline)**: Reproduce standard Olsson et al. induction head detection as baseline
+- **Experiment 2 (Naturalistic detection)**: Apply same detection methodology to natural text to identify which heads show induction behavior on realistic data
+- **Experiment 3 (Comparison)**: Quantify overlap/divergence between random and naturalistic head rankings
+- **Experiment 4 (Ablation)**: Ablate naturalistic-only heads to test their causal role in ICL
+
+## Research Question
+Do transformer models contain attention heads that exhibit induction-like behavior (pattern completion based on prior context) specifically on naturalistic text but not on random token sequences?
+
+## Hypothesis Decomposition
+1. **H1**: Induction head scores will differ between random and naturalistic data for many heads
+2. **H2**: Some heads will score high on naturalistic text but low on random sequences (&#34;naturalistic induction heads&#34;)
+3. **H3**: Naturalistic induction heads, if they exist, will contribute to in-context learning performance
+
+## Proposed Methodology
+
+### Approach
+Use TransformerLens to load GPT-2-small and measure induction head scores on both random repeated sequences (Olsson method) and naturalistic text from OpenWebText. Compare per-head scores across conditions.
+
+For naturalistic text, the &#34;induction pattern&#34; is: when a token appears that previously appeared in context, does the head attend to the token *after* the previous occurrence? This is exactly the standard detection pattern, just applied to natural text where repeated tokens arise organically.
+
+### Experimental Steps
+1. Load GPT-2-small via TransformerLens
+2. Generate random repeated sequences (Olsson method) and compute per-head induction scores
+3. Sample OpenWebText passages, compute per-head induction scores on natural text
+4. Compare head rankings: correlation, overlap of top-K heads
+5. Identify heads with large score differences between conditions
+6. Ablate candidate heads and measure effect on next-token prediction loss
+
+### Baselines
+- Random-sequence induction head detection (Olsson et al.)
+- Uniform/null baseline (random attention patterns)
+
+### Evaluation Metrics
+- Per-head induction score (prefix matching + copying)
+- Rank correlation (Spearman) between random and naturalistic scores
+- Overlap of top-K heads between conditions
+- Loss difference under ablation
+
+### Statistical Analysis Plan
+- Spearman rank correlation for head rankings
+- Paired t-tests for score differences
+- Bootstrap confidence intervals for ablation effects
+- Multiple comparison correction (Bonferroni) where needed
+
+## Expected Outcomes
+- **Supporting H1-H2**: Low correlation between random and naturalistic induction scores; some heads score high only on natural text
+- **Refuting H1-H2**: High correlation; same heads detected in both conditions
+- **Supporting H3**: Ablating naturalistic-only heads increases loss on natural text
+
+## Timeline
+- Phase 1-2: Setup and data prep (done)
+- Phase 3: Implementation (~60 min)
+- Phase 4: Run experiments (~60 min)
+- Phase 5: Analysis (~30 min)
+- Phase 6: Documentation (~20 min)
+
+## Potential Challenges
+- Natural text may have fewer repeated tokens than random sequences, making detection noisier → use many samples and average
+- GPT-2&#39;s vocabulary is large, so exact token repeats may be sparse → also consider sub-word pattern matching
+- Computational cost of running many samples → batch efficiently on GPU
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          LITERATURE REVIEW
+════════════════════════════════════════════════════════════════════════════════
+
+# Literature Review: Naturalistic Induction Heads
+
+## Research Area Overview
+
+Induction heads are attention head circuits in transformers that implement pattern completion: given a sequence `[A][B]...[A]`, they predict `[B]`. First identified by Elhage et al. (2021) and extensively studied by Olsson et al. (2022), induction heads are believed to be a key mechanism underlying in-context learning (ICL). However, a critical gap exists: **induction heads have been primarily defined and detected using random token sequences**, while their role in processing naturalistic (training-distribution-like) data remains less understood.
+
+Our research hypothesis is that induction heads identified on random data may differ from mechanisms that operate on naturalistic data resembling the model&#39;s training distribution.
+
+## Key Papers
+
+### Paper 1: In-context Learning and Induction Heads (Olsson et al., 2022)
+- **Key Contribution**: Established that induction heads form during a &#34;phase change&#34; early in training, coinciding with a dramatic improvement in in-context learning ability.
+- **Methodology**: Trained 34 transformer models (1-layer to 40-layer, up to 13B parameters). Detected induction heads using **repeated random token sequences** with prefix matching and copying scores.
+- **Datasets Used**: Filtered Common Crawl + internet books for training; random token sequences for induction head detection; natural text for ICL measurement.
+- **Key Results**:
+  - Induction heads form during a sharp phase transition (~1-2% through training)
+  - The phase change coincides with a loss bump and ICL improvement
+  - In small models, ablating induction heads removes nearly all ICL capability
+  - Same heads that copy random sequences also perform &#34;fuzzy&#34; matching (translation, abstract pattern completion) in large models
+- **Code Available**: No dedicated repo. Methodology absorbed into TransformerLens.
+- **Critical Gap**: Induction heads are **defined on random data** but claimed to drive ICL on natural text. The bridge is correlational, not causal, for large models.
+
+### Paper 2: Identifying Semantic Induction Heads (Ren et al., 2024)
+- **Key Contribution**: Discovered &#34;semantic induction heads&#34; that encode syntactic dependencies and knowledge graph relations, going far beyond token-level copying.
+- **Methodology**: Used QK/OV circuit decomposition on InternLM2-1.8B. Measured &#34;relation index&#34; — whether a head&#39;s OV output boosts logits for semantically related tokens (not just copied tokens). Tracked formation during training of a ~1B model.
+- **Datasets Used**: AGENDA dataset (knowledge graphs + text), spaCy-parsed syntactic dependencies, SlimPajama (627B tokens for training).
+- **Key Results**:
+  - Specific attention heads encode semantic relationships (Used-for, Part-of, Hyponym-of, etc.)
+  - Three levels of ICL emerge progressively: loss reduction → format compliance → pattern discovery
+  - Semantic induction heads correlate with pattern discovery emergence
+  - Some copying heads&#39; scores DROP when pattern discovery emerges, suggesting pure copying can be counterproductive
+- **Code Available**: No code released. Uses open InternLM2-1.8B model.
+- **Relevance**: **Most directly relevant** to our hypothesis. Shows naturalistic data activates richer mechanisms than random-sequence copying.
+
+### Paper 3: The Evolution of Statistical Induction Heads (Edelman et al., 2024)
+- **Key Contribution**: Showed induction heads can compute calibrated conditional probabilities (Bayesian-optimal predictions), not just deterministic copies.
+- **Methodology**: Trained small 2-layer attention-only transformers on Markov chain sequences. Proved a single-head 2-layer transformer can represent bigram statistics. Analyzed gradient dynamics.
+- **Datasets Used**: Synthetic Markov chains (k=2,3,8 states, Dirichlet-distributed transitions).
+- **Key Results**:
+  - Three-phase learning: uniform → unigram → bigram (statistical induction head)
+  - Simpler unigram solution acts as a **distractor**, delaying bigram learning
+  - Layer alignment is crucial: second layer learns first, then first layer aligns
+  - Single-layer transformers cannot solve the task
+- **Code Available**: Based on minGPT; no dedicated repo.
+- **Relevance**: Demonstrates induction heads are more general than simple copying. Explicitly calls for extension to natural language.
+
+### Paper 4: What Needs to Go Right for an Induction Head? (Singh et al., 2024)
+- **Key Contribution**: Identified three subcircuits (previous token attention, QK matching, copying) whose multiplicative interaction produces the phase change.
+- **Methodology**: &#34;Artificial optogenetics&#34; — clamping subcircuit activations during training to isolate causal roles. Used Omniglot for few-shot learning tasks.
+- **Key Results**:
+  - Multiple induction heads form with emergent redundancy
+  - Previous token heads wire to induction heads many-to-many
+  - Data properties (classes, labels) differentially affect subcircuit formation timing
+  - Copy subcircuit is harder than previously assumed — especially relevant for naturalistic data with large vocabularies
+- **Code Available**: https://github.com/aadityasingh/icl-dynamics (JAX/Equinox)
+
+### Paper 5: Birth of a Transformer (Bietti et al., 2023)
+- **Key Contribution**: Studied induction head emergence through an associative memory lens, using quasi-naturalistic bigram statistics.
+- **Methodology**: Trained simplified 2-layer transformers on synthetic bigram sequences parameterized by character-level statistics from tiny Shakespeare.
+- **Key Results**:
+  - Global bigrams learned faster than induction head mechanism
+  - Top-down learning order: output associations first, then attention focusing
+  - Data distribution properties significantly affect formation speed
+  - Training on uniform output tokens generalizes better than bigram-distributed outputs
+- **Code Available**: https://github.com/abietti/transformer-birth
+
+### Paper 6: From Shortcut to Induction Head (Kawata et al., 2025)
+- **Key Contribution**: Proved that data diversity determines whether transformers learn induction heads or positional shortcuts.
+- **Methodology**: Rigorous analysis of gradient-based training on a trigger-output copying task. Proved phase transition governed by &#34;max-sum ratio&#34; of trigger distances.
+- **Key Results**:
+  - Sufficient data diversity → induction head (generalizable)
+  - Low diversity → positional shortcut (fails OOD)
+  - Trade-off between pretraining context length and OOD generalization
+- **Relevance**: Directly shows data distribution controls mechanism selection. Natural language (high diversity) should favor induction heads over shortcuts.
+
+## Common Methodologies
+
+1. **QK/OV Circuit Decomposition** (Elhage 2021, Ren 2024): Decompose attention heads into query-key matching and output-value circuits to understand what each head attends to and what it outputs.
+
+2. **Prefix Matching / Copying Scores** (Olsson 2022): Quantify induction head behavior on repeated random sequences. Standard detection method but limited to token-identity matching.
+
+3. **Training Dynamics Analysis** (Edelman 2024, Singh 2024, Bietti 2023): Track circuit formation throughout training to understand emergence order and phase transitions.
+
+4. **Activation Patching / Ablation** (Olsson 2022, Singh 2024): Knock out or clamp specific heads/circuits to measure causal contribution to ICL.
+
+## Standard Baselines
+
+- **Random sequence induction head detection** (Olsson et al.): The standard baseline for identifying induction heads. Our work should compare naturalistic detection against this.
+- **Prefix matching score**: Fraction of attention on previous-token-matched positions.
+- **Copying score**: Whether head output increases logits of attended tokens.
+
+## Evaluation Metrics
+
+- **Prefix matching score**: How much each head attends to induction-relevant positions
+- **Copying score**: Whether OV circuit copies attended tokens to output
+- **Relation index** (Ren 2024): Whether OV circuit boosts semantically related (not just identical) tokens
+- **In-context learning score**: Loss at token 500 minus loss at token 50 (Olsson 2022)
+- **KL divergence to Bayes-optimal**: For statistical induction heads (Edelman 2024)
+
+## Datasets in the Literature
+
+- **Random token sequences**: Used in Olsson 2022 for detection (our baseline)
+- **OpenWebText / Common Crawl**: Training data for GPT-2 and studied models
+- **AGENDA dataset**: Knowledge graphs + text (Ren 2024)
+- **SlimPajama**: 627B token corpus (Ren 2024 training)
+- **Tiny Shakespeare**: Character-level text (Bietti 2023)
+- **Markov chains**: Synthetic sequences (Edelman 2024)
+- **Omniglot**: Few-shot image classification (Singh 2024)
+
+## Gaps and Opportunities
+
+1. **No systematic comparison of induction head behavior on random vs naturalistic data**: Olsson et al. detect on random data and measure ICL on natural text, but never directly compare head behavior across data types.
+
+2. **Semantic induction heads only studied in one paper**: Ren et al. 2024 is the only work examining semantic (vs copying) induction behavior. Their methodology could be applied to more models and data types.
+
+3. **No study of whether &#34;random-data induction heads&#34; and &#34;naturalistic induction heads&#34; are the same heads**: It&#39;s unknown whether the heads that score highest on random-sequence prefix matching are the same ones that perform semantic pattern completion on natural text.
+
+4. **Statistical induction heads only studied on synthetic Markov chains**: Edelman et al. show induction heads can compute probabilities, but only on simple Markov data. Extending to natural language bigram/trigram statistics is an open question.
+
+5. **Data diversity effects only studied theoretically**: Kawata et al. prove diversity matters but only on synthetic trigger-output tasks. Empirical validation on real language models is needed.
+
+## Recommendations for Our Experiment
+
+### Recommended Approach
+1. **Compare induction head detection on random vs naturalistic data**: Use TransformerLens to detect induction heads on GPT-2 (or similar) using both repeated random sequences (Olsson method) and naturalistic text (OpenWebText). Compare which heads are identified and how scores differ.
+
+2. **Look for heads that only activate on naturalistic data**: Identify attention heads that show induction-like behavior on natural text but NOT on random sequences — these would be &#34;naturalistic induction heads.&#34;
+
+3. **Apply semantic induction head methodology**: Use Ren et al.&#39;s relation index to measure whether induction heads encode semantic relationships on naturalistic data.
+
+### Recommended Models
+- **GPT-2 (small, medium, large)**: Well-studied, supported by TransformerLens, trained on WebText
+- **Pythia suite** (70M to 12B): Training checkpoints available, enabling training dynamics analysis
+- **InternLM2-1.8B**: Used in Ren et al., enables comparison
+
+### Recommended Datasets
+- **OpenWebText**: Primary naturalistic data (approximates GPT-2 training distribution)
+- **WikiText-103**: Clean Wikipedia text for controlled experiments
+- **Random token sequences**: Baseline comparison (Olsson methodology)
+
+### Recommended Metrics
+- Prefix matching score (random vs naturalistic)
+- Copying score (random vs naturalistic)
+- Relation index (Ren et al. method, naturalistic only)
+- Head-by-head comparison across data types
+- In-context learning score on natural text with/without ablating naturalistic-only heads
+
+### Methodological Considerations
+- Use the same models to compare random vs naturalistic detection (controlled comparison)
+- Consider both token-level and semantic-level induction patterns
+- Track how induction head scores change across training (if using Pythia checkpoints)
+- Account for sequence length effects (naturalistic text has different length distributions)
+
+
+════════════════════════════════════════════════════════════════════════════════
+                          PAPER REQUIREMENTS
+════════════════════════════════════════════════════════════════════════════════
+
+Generate a complete academic paper with the following structure:
+
+1. TITLE
+   - Clear, specific, informative
+   - Should convey main finding or contribution
+
+2. AUTHOR
+   - Use this exact author line in the \author{} block: Ari Holtzman and NeuriCo
+
+3. ABSTRACT (150-250 words)
+   - Problem statement
+   - Approach
+   - Key results
+   - Significance
+
+4. INTRODUCTION
+   - Research problem and motivation
+   - Gap in existing work
+   - Our contribution (be specific)
+   - Paper organization
+
+5. RELATED WORK
+   - Organized by theme/approach
+   - Position our work relative to prior work
+   - Cite papers from literature review
+
+6. METHODOLOGY
+   - Clear description of approach
+   - Experimental setup
+   - Datasets used
+   - Evaluation metrics
+   - Baselines
+
+7. RESULTS
+   - Present results with tables and figures
+   - Statistical analysis
+   - Comparison to baselines
+   - Ablation studies (if applicable)
+
+8. DISCUSSION
+   - Interpretation of results
+   - Limitations
+   - Broader implications
+
+9. CONCLUSION
+   - Summary of contributions
+   - Key findings
+   - Future work
+
+10. REFERENCES
+   - BibTeX format
+   - All cited papers
+
+════════════════════════════════════════════════════════════════════════════════
+                          OUTPUT FORMAT
+════════════════════════════════════════════════════════════════════════════════
+
+Create a MODULAR LaTeX project with the following directory structure:
+
+paper_draft/
+├── main.tex              # Main file that imports all sections
+├── references.bib        # BibTeX references
+├── sections/
+│   ├── abstract.tex      # Abstract content
+│   ├── introduction.tex  # Introduction section
+│   ├── related_work.tex  # Related work section
+│   ├── methodology.tex   # Methodology section
+│   ├── results.tex       # Results section
+│   ├── discussion.tex    # Discussion section
+│   └── conclusion.tex    # Conclusion section
+├── figures/              # Directory for any generated figures
+├── tables/               # Directory for complex standalone tables
+└── appendix/             # Directory for appendix sections (if needed)
+
+INSTRUCTIONS:
+1. First, create the directory structure above (mkdir -p paper_draft/sections paper_draft/figures paper_draft/tables paper_draft/appendix)
+2. Write main.tex using the EXACT preamble for NEURIPS:
+
+   \documentclass{article}
+   \usepackage[final]{neurips_2025}  % NEURIPS style (neurips_2025.sty is in paper_draft/)
+   \usepackage[hidelinks]{hyperref}  % REQUIRED: clickable links
+   \usepackage{booktabs}  % REQUIRED: professional tables
+   \usepackage{graphicx}
+   \usepackage{amsmath,amssymb}
+
+   % Import command files
+   \input{commands/math}
+   \input{commands/general}
+   \input{commands/macros}
+
+   % Use this bibliography style:
+   \bibliographystyle{plainnat}
+
+   \author{Ari Holtzman and NeuriCo}
+
+   - Use \input{sections/...} to include each section
+   - Use \bibliography{references} for references
+3. Write each section file with COMPLETE content (no placeholders)
+4. Each section file should include its \section{} command
+5. Write references.bib with all citations in BibTeX format
+6. After writing all files, compile the paper:
+   cd paper_draft && pdflatex -interaction=nonstopmode main.tex && bibtex main && pdflatex -interaction=nonstopmode main.tex && pdflatex -interaction=nonstopmode main.tex
+
+This modular structure allows humans to easily:
+- Edit individual sections without navigating a large file
+- Track changes per section
+- Reuse sections across different paper versions
+
+════════════════════════════════════════════════════════════════════════════════
+                          QUALITY REQUIREMENTS
+════════════════════════════════════════════════════════════════════════════════
+
+- Academic tone throughout
+- All claims must be supported by data from the experiment report
+- Proper citations using \cite{} commands
+- Clear figures and tables with proper captions
+- NO placeholder text - every section must have real content
+- The paper MUST compile without errors
+- If compilation fails, debug and fix the LaTeX errors
+
+════════════════════════════════════════════════════════════════════════════════
+                          LAB WRITING STYLE
+════════════════════════════════════════════════════════════════════════════════
+
+Follow these lab-specific conventions to match our paper style:
+
+1. LANGUAGE STYLE:
+   - Use active voice: "We propose", "We examine", "We focus on"
+   - Be direct and confident: "Our main question is...", "We hypothesize that..."
+   - State things clearly and simply - prefer plain language over jargon
+   - Use bold questions as paragraph organizers: {\bf what is X?}
+   - Include specific quantitative claims: "8.97% over baseline"
+   - Avoid fancy wording: "utilize" → "use", "facilitate" → "help"
+
+2. INTRODUCTION STRUCTURE:
+   - Engaging hook (get to the point quickly)
+   - Problem importance
+   - Gap identification
+   - Your approach with method figure reference
+   - Quantitative preview of results
+   - Contribution bullets (3-4 items, action verbs)
+
+3. CONTRIBUTION LISTS:
+   \begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+       \item We propose...
+       \item We conduct...
+       \item We complement...
+   \end{itemize}
+
+4. MODULAR COMMANDS STRUCTURE:
+   Command templates are pre-copied to paper_draft/commands/:
+   - math.tex: Math notation macros
+   - general.tex: Formatting macros
+   - macros.tex: Project-specific term definitions (customize this for your paper)
+
+   In main.tex, include:
+   \input{commands/math}
+   \input{commands/general}
+   \input{commands/macros}
+
+5. REFERENCE CONVENTIONS:
+   Use reference macros from math.tex:
+   - \figref{fig:name} for "figure 1" (lowercase, in-sentence)
+   - \Figref{fig:name} for "Figure 1" (capitalized, start of sentence)
+   - \secref{sec:name} for "section 2"
+
+6. TEXT FORMATTING:
+   - Use \para{Header text} for bold paragraph headers
+   - Define method/dataset names with \textsc and \xspace:
+     \newcommand{\methodname}{\textsc{MethodName}\xspace}
+
+7. TABLE FORMATTING:
+   - Use booktabs package (no vertical lines)
+   - Use \resizebox{\textwidth}{!}{...} for wide tables
+   - Use @{} to remove padding at table edges
+   - Use \cmidrule(lr){x-y} for sub-headers
+   - Use \textsc{} for dataset/method names in headers
+   - Bold best results with {\bf ...}
+
+8. FIGURE FORMATTING:
+   - Use 0.32\textwidth for 3-column subfigures
+   - Use 0.95\linewidth for full-width figures
+   - Use \input{figures/legend} for shared legends
+   - Write self-contained captions explaining key observations
+
+9. RESULTS PRESENTATION:
+   - Define \increase and \decrease for colored arrows (green up, red down)
+   - Bold best results in tables
+   - Report confidence intervals when available
+
+10. ALGORITHM STYLING:
+    - Use algpseudocode with [noend]
+    - Use \triangleright for comments
+
+11. HYPERLINKS (REQUIRED):
+    - Always use \usepackage[hidelinks]{hyperref} or with colored links
+    - All citations, section refs, figure refs, table refs must be clickable
+    - This is essential for reader navigation
+
+════════════════════════════════════════════════════════════════════════════════
+                          WORKFLOW: REVIEW AND REFLECT
+════════════════════════════════════════════════════════════════════════════════
+
+Before calling finish, you MUST complete these review steps:
+
+1. REVIEW RESOURCES (at the start):
+   - Read .claude/skills/paper-writer/SKILL.md for detailed guidance
+   - Study templates/paper_writing/lab_style_guide.md for style conventions
+   - Browse paper_examples/ for formatting and language patterns
+
+2. SELF-REFLECTION (before finishing):
+   After writing all sections, review your work against these criteria:
+
+   LANGUAGE CHECK:
+   - [ ] Is the writing clear and jargon-free?
+   - [ ] Are claims specific with quantitative support?
+   - [ ] Is active voice used throughout?
+
+   FORMATTING CHECK:
+   - [ ] Does main.tex include \input{commands/math}, \input{commands/general}, \input{commands/macros}?
+   - [ ] Is hyperref package included for clickable references?
+   - [ ] Do tables use booktabs (no vertical lines)?
+   - [ ] Are best results bolded in tables?
+   - [ ] Are figures/tables properly captioned?
+
+   STRUCTURE CHECK:
+   - [ ] Does introduction follow: hook → importance → gap → approach → preview → contributions?
+   - [ ] Are contribution bullets specific with action verbs?
+   - [ ] Does the paper compile without errors?
+
+3. FIX ISSUES:
+   - Address any issues found in the self-reflection
+   - Re-compile and verify the PDF looks correct
+
+Only after completing this review should you consider the paper finished.

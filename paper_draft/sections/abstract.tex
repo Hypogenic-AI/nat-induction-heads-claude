@@ -1,0 +1,8 @@
+Induction heads---attention heads that complete patterns of the form $[A][B]\ldots[A] \rightarrow B$---are considered fundamental to in-context learning in transformers.
+Yet they have been primarily identified and studied using random repeated token sequences, an artificial setup far from the natural language these models were trained on.
+We ask: do the same heads that perform induction on random data also do so on naturalistic text, or are there ``hidden'' induction mechanisms that only activate on training-distribution-like inputs?
+We measure per-head induction scores on both random repeated sequences and \owt passages in \gpttwo (124M parameters), complemented by output-value (OV) copying analysis and causal ablation experiments.
+We find that the rank ordering of heads is highly conserved across conditions (Spearman $\rho = 0.84$, top-5 overlap = 80\%), ruling out the existence of naturalistic-only induction heads in the standard sense.
+However, induction scores are 10--40$\times$ lower on natural text, and late-layer heads (layers 9--11) show dramatically \emph{stronger} copying behavior on natural text than on random data---up to 29$\times$ higher OV copying scores.
+Ablating the 21 random-detected induction heads increases natural-text loss by 76.6\%.
+Our results show that standard random-sequence detection identifies the right heads but underestimates their natural-language capabilities: the same induction heads implement a richer, distribution-sensitive form of pattern completion on naturalistic data.

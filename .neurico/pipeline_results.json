@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "stages": {
+    "resource_finder": {
+      "success": true,
+      "completion_marker": "/workspaces/nat-induction-heads-claude/.resource_finder_complete",
+      "outputs": {
+        "literature_review": "/workspaces/nat-induction-heads-claude/literature_review.md",
+        "resources_catalog": "/workspaces/nat-induction-heads-claude/resources.md",
+        "papers_dir": "/workspaces/nat-induction-heads-claude/papers",
+        "datasets_dir": "/workspaces/nat-induction-heads-claude/datasets",
+        "code_dir": "/workspaces/nat-induction-heads-claude/code"
+      },
+      "log_file": "/workspaces/nat-induction-heads-claude/logs/resource_finder_claude.log",
+      "transcript_file": "/workspaces/nat-induction-heads-claude/logs/resource_finder_claude_transcript.jsonl",
+      "elapsed_time": 1694.210185289383
+    },
+    "experiment_runner": {
+      "success": true,
+      "return_code": 0,
+      "elapsed_time": 1216.4610702991486,
+      "log_file": "/workspaces/nat-induction-heads-claude/logs/execution_claude.log",
+      "transcript_file": "/workspaces/nat-induction-heads-claude/logs/execution_claude_transcript.jsonl"
+    }
+  },
+  "work_dir": "/workspaces/nat-induction-heads-claude"
+}

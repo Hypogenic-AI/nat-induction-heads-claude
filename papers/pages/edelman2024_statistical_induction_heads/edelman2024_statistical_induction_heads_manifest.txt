@@ -1,0 +1,16 @@
+PDF: papers/edelman2024_statistical_induction_heads.pdf
+Total pages: 31
+Pages per chunk: 3
+
+Chunks:
+  edelman2024_statistical_induction_heads_chunk_001.pdf: pages 1-3
+  edelman2024_statistical_induction_heads_chunk_002.pdf: pages 4-6
+  edelman2024_statistical_induction_heads_chunk_003.pdf: pages 7-9
+  edelman2024_statistical_induction_heads_chunk_004.pdf: pages 10-12
+  edelman2024_statistical_induction_heads_chunk_005.pdf: pages 13-15
+  edelman2024_statistical_induction_heads_chunk_006.pdf: pages 16-18
+  edelman2024_statistical_induction_heads_chunk_007.pdf: pages 19-21
+  edelman2024_statistical_induction_heads_chunk_008.pdf: pages 22-24
+  edelman2024_statistical_induction_heads_chunk_009.pdf: pages 25-27
+  edelman2024_statistical_induction_heads_chunk_010.pdf: pages 28-30
+  edelman2024_statistical_induction_heads_chunk_011.pdf: page 31

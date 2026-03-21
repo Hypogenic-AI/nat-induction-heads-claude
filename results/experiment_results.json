@@ -1,0 +1,134 @@
+{
+  "config": {
+    "model": "gpt2",
+    "n_layers": 12,
+    "n_heads": 12,
+    "n_sequences": 50,
+    "seq_len": 257,
+    "threshold": 0.1,
+    "seed": 42
+  },
+  "repeat_rates": {
+    "random_mean": 0.5,
+    "random_std": 0.001,
+    "natural_mean": 0.411,
+    "natural_std": 0.054
+  },
+  "correlations": {
+    "spearman_r": 0.8387910939635078,
+    "spearman_p": 2.5499802454050026e-39,
+    "pearson_r": 0.8712503483470043,
+    "pearson_p": 9.93736348694975e-46
+  },
+  "top_k_overlaps": {
+    "5": 4,
+    "10": 8,
+    "20": 14
+  },
+  "head_categories": {
+    "universal": [],
+    "random_only": [
+      [
+        5,
+        0
+      ],
+      [
+        5,
+        1
+      ],
+      [
+        5,
+        5
+      ],
+      [
+        6,
+        9
+      ],
+      [
+        7,
+        1
+      ],
+      [
+        7,
+        2
+      ],
+      [
+        7,
+        10
+      ],
+      [
+        8,
+        1
+      ],
+      [
+        9,
+        0
+      ],
+      [
+        9,
+        1
+      ],
+      [
+        9,
+        6
+      ],
+      [
+        9,
+        9
+      ],
+      [
+        10,
+        0
+      ],
+      [
+        10,
+        1
+      ],
+      [
+        10,
+        3
+      ],
+      [
+        10,
+        6
+      ],
+      [
+        10,
+        7
+      ],
+      [
+        10,
+        10
+      ],
+      [
+        10,
+        11
+      ],
+      [
+        11,
+        9
+      ],
+      [
+        11,
+        10
+      ]
+    ],
+    "naturalistic_only": []
+  },
+  "ablation": {
+    "universal": null,
+    "naturalistic_only": null,
+    "random_only": {
+      "baseline_loss": 3.0471,
+      "ablated_loss": 5.38,
+      "loss_increase": 2.3329,
+      "loss_increase_pct": 76.56
+    },
+    "top5_naturalistic": {
+      "baseline_loss": 3.0471,
+      "ablated_loss": 4.461,
+      "loss_increase": 1.4139,
+      "loss_increase_pct": 46.4
+    }
+  }
+}

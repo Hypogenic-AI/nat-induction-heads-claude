@@ -1,0 +1,32 @@
+\section{Introduction}
+\label{sec:intro}
+
+Induction heads are among the most well-characterized circuits in transformer language models.
+First identified by \citet{elhage2021mathematical} and extensively studied by \citet{olsson2022context}, these attention heads implement a simple but powerful pattern: given a sequence $[A][B]\ldots[A]$, they predict $B$ by attending to the token following the previous occurrence of $A$.
+This mechanism is believed to underlie much of in-context learning (\icl), the ability of language models to adapt their predictions based on context without weight updates.
+
+{\bf But how do we know which heads are induction heads?}
+The standard detection protocol \cite{olsson2022context} feeds the model random repeated token sequences---\eg $[\texttt{cat}][\texttt{dog}]\ldots[\texttt{cat}]$---and measures whether each head attends to the position after the first occurrence of the repeated token.
+This artificial setup provides a clean, controlled signal, but it is far from the natural language on which these models were trained.
+A head that scores highly on random repeated sequences may behave quite differently when processing real text, where attention must be distributed across many semantically and syntactically relevant positions rather than concentrated on a single induction target.
+
+We hypothesize that this gap between detection conditions and deployment conditions may cause the standard protocol to miss important aspects of how induction mechanisms operate on naturalistic data.
+Specifically, there may exist heads that perform pattern completion on natural text but remain silent on random sequences, or conversely, heads identified as strong induction heads on random data may contribute to natural language processing through mechanisms that the standard induction score fails to capture.
+
+To test this, we conduct a systematic comparison of induction head behavior on random versus naturalistic data in \gpttwo (124M parameters).
+We apply the standard induction score \cite{olsson2022context} identically to both random repeated sequences and \owt passages, then complement this attention-pattern analysis with output-value (OV) copying scores that measure what each head \emph{does} with the information it attends to.
+We further validate our findings through ablation experiments that measure the causal contribution of identified heads to natural language processing.
+
+Our main findings are:
+\begin{itemize}[leftmargin=*,itemsep=0pt,topsep=0pt]
+    \item We show that induction heads identified on random data are the \emph{same} heads that show the strongest induction behavior on natural text (Spearman $\rho = 0.84$, top-5 overlap = 80\%), ruling out the existence of hidden naturalistic-only induction heads.
+    \item We demonstrate that induction scores are 10--40$\times$ lower on natural text despite similar token repeat rates (41\% vs.\ 50\%), revealing that the standard metric dramatically overstates induction pattern strength under naturalistic conditions.
+    \item We discover that late-layer heads (layers 9--11) exhibit up to 29$\times$ stronger OV copying on natural text than on random data, indicating distribution-sensitive output circuits that the attention-pattern-based detection protocol underestimates.
+    \item We confirm through ablation that the 21 random-detected induction heads are causally important for natural text processing, increasing loss by 76.6\% when removed.
+\end{itemize}
+
+The rest of this paper is organized as follows.
+\Secref{sec:related} reviews prior work on induction heads and in-context learning mechanisms.
+\Secref{sec:method} describes our experimental methodology.
+\Secref{sec:results} presents our results, and \secref{sec:discussion} discusses their implications and limitations.
+We conclude in \secref{sec:conclusion}.

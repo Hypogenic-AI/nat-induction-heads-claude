@@ -1,0 +1,12 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+We conducted a systematic comparison of induction head behavior on random versus naturalistic data in \gpttwo.
+Our results show that induction heads are \emph{not} data-type-specific: the same heads identified by random-sequence detection also show the strongest induction signals on natural text (Spearman $\rho = 0.84$).
+However, the nature of their operation differs dramatically across conditions.
+Induction attention patterns are 10--40$\times$ weaker on natural text, while late-layer OV copying circuits are up to 29$\times$ \emph{stronger}---revealing a distribution-sensitive form of pattern completion that the standard detection protocol underestimates.
+
+The answer to our motivating question---``are there hidden induction heads that only activate on naturalistic data?''---is: not as separate heads, but as separate \emph{behaviors} of the same heads.
+Standard random-sequence detection identifies the right circuits but provides an incomplete picture of how they function on the data these models were trained to process.
+
+Future work should extend this analysis to larger models, examine whether naturalistic-only induction heads emerge with scale, track how the QK--OV dissociation evolves during training using Pythia checkpoints, and connect our OV copying findings to the semantic induction mechanisms described by \citet{ren2024identifying}.
